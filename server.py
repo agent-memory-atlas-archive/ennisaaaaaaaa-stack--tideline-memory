@@ -2026,7 +2026,7 @@ async def _dispatch(name, a, c):
 
         rows = c.execute("""
             SELECT cluster_name, COUNT(*) as hits, AVG(sim) as avg_sim, MAX(created_at) as last_seen
-            FROM attention_log WHERE created_at > ?
+            FROM attention_log WHERE created_at > ? AND source != 'mcp_search_full'
             GROUP BY cluster_name ORDER BY hits DESC
         """, (cutoff,)).fetchall()
 
@@ -2036,7 +2036,7 @@ async def _dispatch(name, a, c):
 
         total = sum(r["hits"] for r in rows)
         lines = [f"👁️ 注意力分布（{days}天，共{total}次命中，{len(rows)}簇）"]
-        lines.append("📖 读图须知：① 命中按行计——一次搜索会点亮几十条记忆，行数大≠被问得多；每晚约02:00(北京)有一次全库扫描（洒水车），看来源分布时请记住它的存在。② 时间戳为UTC，北京+8。③ 『从未照亮』按簇名口径——簇没亮过≠记忆本体没被照过，本体可能天天被别的路径扫到。")
+        lines.append("📖 读图须知：① 命中按行计——行数大≠被问得多。② 洒水车已于2026-10-09(R104)退役：历史mcp_search全量打分行(整桶≥100行)已整桶改标mcp_search_full并在本统计中排除，现行mcp_search按「看见过」入账(limit*2截断,与返回结果同口径)；要查原始洪水地层仍可直接SELECT。③ 时间戳为UTC，北京+8。④ 『从未照亮』按簇名口径——簇没亮过≠记忆本体没被照过。")
         lines.append("")
         shown_rows = rows[:limit]
         for r in shown_rows:
@@ -2061,6 +2061,7 @@ async def _dispatch(name, a, c):
                     "t1_prefetch": "T1语义检索（主动）",
                     "t0_inject": "T0权重注入（被动）",
                     "mcp_search": "MCP搜索（手动）",
+                    "mcp_search_full": "MCP搜索·洪水层（已退役，R104整桶改标）",
                     "mcp_recall": "MCP浏览（被动）",
                     "dream": "DREAM检索",
                 }
@@ -2414,9 +2415,22 @@ async def _dispatch(name, a, c):
         deduped.sort(key=lambda x: -(x[0] + x[3]))
         
         # ── Log memory_search narrative hits as attention ──
-        # Both keyword and semantic narrative hits, with their actual sim scores
+        # R104 (2026-10-09, 照夜洗泥报告裁定): 入账必须记「看见过」而非「打过分」。
+        # 旧路把全部 sim>0.3 打分行(可至全库)整批入账后才按 limit 截断返回——
+        # attention_log 的 mcp_search 层是一次一整车的洪水，暗区检测被污染:
+        # 「每条都被洒过」≠「每条被看见过」。修法: 按调用方 limit*2 截断入账，
+        # 与返回给调用方的 deduped[:limit*2] 同口径。历史洪水桶已整桶改标
+        # mcp_search_full(2026-10-09)，统计时排除; mcp_recall 路当时已先
+        # LIMIT 后入账，无需动。
         mcp_search_scored = [(1.0, r) for r in nar_kw] + nar_sem_hits
-        _log_attention_mcp(c, mcp_search_scored, source="mcp_search")
+        # 按 score 降序收敛取 max 后取前 limit*2 —— 与显示口径一致
+        _search_seen = {}
+        for _s, _r in mcp_search_scored:
+            _nid = _r["id"]
+            if _nid not in _search_seen or _s > _search_seen[_nid]:
+                _search_seen[_nid] = _s
+        mcp_search_seen = sorted(_search_seen.items(), key=lambda x: -x[1])[: limit * 2]
+        _log_attention_mcp(c, [(s, {"id": nid}) for nid, s in mcp_search_seen], source="mcp_search")
         
         lines = [f"🔍 搜索 \"{query}\" 的结果（{len(deduped[:limit*2])} 条）：\n"]
         for score, source, text, boost in deduped[:limit * 2]:
