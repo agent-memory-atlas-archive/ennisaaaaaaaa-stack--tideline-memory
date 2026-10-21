@@ -32,7 +32,8 @@ OVERTURN_PATTERN = re.compile(
 )
 
 # 近全库共有的泛化词——实体和tags里都一样，不能当「同一件事」的证据
-GENERIC_WORDS = {"hui", "设计师", "用户", "user", "我", "self"}
+# 洄=本体名（190/1480条含此实体，2026-10-07固化层裁决加入：洄-only交集曾一夜灌286条误报）
+GENERIC_WORDS = {"hui", "洄", "设计师", "用户", "user", "我", "self"}
 
 MIN_SPECIFIC_TAGS_HIGH = 2  # 真案采样：#218⟂#217(共读进度+海蜃馆)、#227⟂#226(叙述陷阱+青丝断)都≥2个具体tag
 MIN_ENTITY_OVERLAP_MEDIUM = 2
