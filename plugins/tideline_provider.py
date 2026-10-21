@@ -749,7 +749,11 @@ class TidelineMemoryProvider(MemoryProvider):
         if not best_sess:
             return ""
 
-        chunks = sessions[best_sess][-max_chunk:]
+        # 修复 2026-10-21：rows 按 DESC（新→旧）顺序 append，列表尾其实是窗口内
+        # 最旧的几条——与 docstring「Return the latest N chunks」相反，实际显示成
+        # 上一场对话的开头而非收尾质感（甜心从注入的桥接段定位到此）。
+        # 正解：列表头=最新 max_chunk 条，再反转回时间正序展示。
+        chunks = list(reversed(sessions[best_sess][:max_chunk]))
         lines = ["## 上下文桥接（最近对话质感）\n"]
         for chunk in chunks:
             text = chunk["content"][:400]
