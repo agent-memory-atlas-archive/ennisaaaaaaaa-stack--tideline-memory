@@ -12,7 +12,7 @@ then reverse to chronological order for display.
 mins_ago 越小越新。MARK1 若 mins_ago=10 则 MARK1 是最新——别按编号直觉走。
 
 Self-contained: builds its own :memory:-style temp DB, imports provider by path.
-Run: /home/ubuntu/.hermes/hermes-agent/venv/bin/python tests/fixture_phase21_context_bridge.py
+Run: /home/ubuntu/.hermes/hermes-agent/venv/bin/python tests/fixture_phase22_context_bridge.py
 """
 import importlib.util
 import os
