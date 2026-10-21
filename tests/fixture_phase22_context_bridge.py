@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""phase21: T2b context bridge — fix 'oldest-5' bug, pin latest-N behavior.
+"""phase22: T2b context bridge — fix 'oldest-5' bug, pin latest-N behavior.
 
 Bug: rows came back DESC (new→old), appended in that order, then [-max_chunk:]
 took the list tail = the OLDEST 5 entries of the chosen session.
@@ -78,7 +78,7 @@ def markers_of(text):
     return [ln.split("|")[0].strip() for ln in text.splitlines() if "|" in ln]
 
 
-print("== phase21: T2b context bridge latest-N fix ==")
+print("== phase22: T2b context bridge latest-N fix ==")
 
 # ── E1: 单会话 8 条，取最新 5 条，时间正序展示 ──
 # 生成时 mins_ago = 10*i：i=1(MARK1,10min前)=最新 … i=8(MARK8,80min前)=最旧
