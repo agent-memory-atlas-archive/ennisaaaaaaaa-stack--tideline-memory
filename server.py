@@ -13,7 +13,7 @@ Environment variables:
   AGENT_NAME          Agent label for logs (default: "agent")
 """
 
-import os, sys, json, math, sqlite3, hashlib, re
+import os, sys, json, math, sqlite3, hashlib, re, asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -1641,14 +1641,27 @@ async def list_tools() -> list[types.Tool]:
 
 @app.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
-    c = _db()
-    try:
-        return await _dispatch(name, arguments, c)
-    except Exception as e:
-        print(f"[memory-mcp] error in {name}: {e}", file=sys.stderr)
-        return [types.TextContent(type="text", text=f"❌ 出错了: {e}")]
-    finally:
-        c.close()
+    # v2.13（2026-10-23 并发头阻塞止血）：整个 dispatch 连同 SQLite 连接
+    # 挪进线程池执行——事件循环上只剩这层壳，永远腾得出手应答 keepalive。
+    # 昨晚（10/22 03:14-05:32）事故机理：DREAM 批处理长同步段占住单线程
+    # asyncio 的事件循环 → keepalive 应答不了 → gateway 判 degraded →
+    # 排队调用连环 300s 超时。零 SQLITE_BUSY——不是锁，是头阻塞。
+    #
+    # _dispatch 体内 93 处同步 DB 调用全部随迁线程，签名不动（夹具
+    # phase12/13/15 直接 await srv._dispatch，兼容面零改）。
+    # 线程内再起私有事件循环，供 _embed/_ensure_amvec_sync 等 true-async
+    # 段使用——httpx.AsyncClient 不跨事件循环复用。
+    def _run_in_thread() -> list[types.TextContent]:
+        c = _db()
+        try:
+            return asyncio.run(_dispatch(name, arguments, c))
+        except Exception as e:
+            print(f"[memory-mcp] error in {name}: {e}", file=sys.stderr)
+            return [types.TextContent(type="text", text=f"❌ 出错了: {e}")]
+        finally:
+            c.close()
+
+    return await asyncio.to_thread(_run_in_thread)
 
 
 async def _dispatch(name, a, c):
